@@ -7,7 +7,7 @@ export default defineConfig({
     "src/workflows/cloudflare/index.ts",
     "src/workflows/cloudflare/sse/index.ts",
   ],
-  splitting: false,
+  splitting: true,
   sourcemap: true,
   clean: true,
   format: "esm",
