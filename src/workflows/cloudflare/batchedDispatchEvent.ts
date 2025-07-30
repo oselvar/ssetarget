@@ -50,7 +50,6 @@ export function batchedDispatchEvent<T extends WorkflowEvents<object>>(
 
             if (events.length > 0) {
               const eventsDurableObject = workflowEventsNs.get(workflowEventsNs.idFromName(runId));
-              console.log("Dispatching", events);
               await eventsDurableObject.dispatchEvent(events);
             }
             resolve();

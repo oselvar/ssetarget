@@ -12,13 +12,12 @@ export type ServerSentEventWithId<E extends ServerSentEvent> = E & {
 /**
  * Receives events and dispatches them to connected EventSource clients.
  *
- * All dispatched events are stored.
- * This allows clients to receive previously dispatched events.
+ * New clients will receive previously dispatched events.
  *
  * *IMPORTANT:* This class is meant to be subclassed, overriding storeEvent and getEvents.
  * The default implementation stores events in memory, which may cause out of memory errors.
  */
-export class SSETarget<E extends ServerSentEvent> {
+export abstract class SSETarget<E extends ServerSentEvent> {
   private eventResolvers: Array<() => void> = [];
 
   constructor(
@@ -37,17 +36,9 @@ export class SSETarget<E extends ServerSentEvent> {
     this.notifyNewEvent();
   }
 
-  private events: ServerSentEventWithId<E>[] = [];
+  protected abstract storeEvent(event: E): void;
 
-  protected storeEvent(event: E): void {
-    this.events.push({ ...event, id: this.events.length + 1 });
-  }
-
-  protected getEvents(
-    sinceId?: number,
-  ): readonly ServerSentEventWithId<ServerSentEventWithId<E>>[] {
-    return this.events.filter((event) => event.id > (sinceId ?? 0));
-  }
+  protected abstract getEvents(lastEventId: number): readonly ServerSentEventWithId<E>[];
 
   async fetch(request: Request) {
     const app = new Hono<{ Bindings: Env }>();
@@ -66,20 +57,19 @@ export class SSETarget<E extends ServerSentEvent> {
           clearInterval(ping);
         });
 
-        const lastEventId = c.req.header("Last-Event-ID");
-        let lastEventCount = 0;
+        const lastEventIdHeader = c.req.header("Last-Event-ID");
+        let lastEventId = 0;
 
-        if (lastEventId) {
-          const sinceId = parseInt(lastEventId, 10);
-          if (!isNaN(sinceId)) {
+        if (lastEventIdHeader) {
+          lastEventId = parseInt(lastEventIdHeader, 10);
+          if (isNaN(lastEventId)) {
             // Start from the event after the last received event
-            lastEventCount = sinceId;
+            lastEventId = 0;
           }
         }
 
         while (loop) {
-          const allEvents = this.getEvents(lastEventCount > 0 ? lastEventCount : undefined);
-          const newEvents = allEvents.slice(lastEventCount > 0 ? 0 : lastEventCount);
+          const newEvents = this.getEvents(lastEventId);
 
           for (const event of newEvents) {
             const { id, type, ...rest } = event;
@@ -88,12 +78,9 @@ export class SSETarget<E extends ServerSentEvent> {
               event: type,
               data: JSON.stringify(rest),
             });
+            lastEventId = id;
           }
 
-          lastEventCount =
-            allEvents.length > 0
-              ? (allEvents[allEvents.length - 1]?.id ?? lastEventCount)
-              : lastEventCount;
           await this.waitForNewEvent();
         }
       });
