@@ -7,9 +7,9 @@ export class MemorySSETarget<E extends ServerSentEvent> extends SSETarget<E> {
     this.events.push({ ...event, id: this.events.length + 1 });
   }
 
-  protected override getEvents(
+  protected override async getEvents(
     lastEventId: number,
-  ): readonly ServerSentEventWithId<ServerSentEventWithId<E>>[] {
-    return this.events.filter((event) => event.id > lastEventId);
+  ): Promise<readonly ServerSentEventWithId<ServerSentEventWithId<E>>[]> {
+    return Promise.resolve(this.events.filter((event) => event.id > lastEventId));
   }
 }

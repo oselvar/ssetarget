@@ -44,7 +44,7 @@ class DurableObjectSSETarget extends SSETarget<StepEvent> {
     sql.exec(query, ...[event.taskId, event.type, event.step, event.timestamp, event.error]);
   }
 
-  override getEvents(lastEventId: number): readonly StepEventWithId[] {
+  override async getEvents(lastEventId: number): Promise<readonly StepEventWithId[]> {
     const sql = this.ctx.storage.sql;
     return sql
       .exec<StepEventWithId>("SELECT * FROM events WHERE id > ? ORDER BY id ASC", lastEventId)

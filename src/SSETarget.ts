@@ -38,7 +38,7 @@ export abstract class SSETarget<E extends ServerSentEvent> {
 
   protected abstract storeEvent(event: E): void;
 
-  protected abstract getEvents(lastEventId: number): readonly ServerSentEventWithId<E>[];
+  protected abstract getEvents(lastEventId: number): Promise<readonly ServerSentEventWithId<E>[]>;
 
   async fetch(request: Request) {
     const app = new Hono<{ Bindings: Env }>();
@@ -69,7 +69,7 @@ export abstract class SSETarget<E extends ServerSentEvent> {
         }
 
         while (loop) {
-          const newEvents = this.getEvents(lastEventId);
+          const newEvents = await this.getEvents(lastEventId);
 
           for (const event of newEvents) {
             const { id, type, ...rest } = event;

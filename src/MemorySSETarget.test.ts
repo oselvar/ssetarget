@@ -26,7 +26,7 @@ const events: TestEvent[] = [
 const lastEvent = events[events.length - 1] as TestEvent;
 
 describe("MemorySSETarget", () => {
-  it("should dispatch events to Eventource", async () => {
+  it("should dispatch events to EventSource", async () => {
     const sse = new MemorySSETarget<TestEvent>("/sse");
 
     for (const event of events) {
