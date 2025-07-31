@@ -1,8 +1,8 @@
 import { describe } from "vitest";
 
-import { MemorySSETarget } from "./MemorySSETarget";
+import { MemoryEventStore } from "./MemoryEventStore";
 import { runSSETargetTests } from "./SSETargetTests";
 
-describe("MemorySSETarget", () => {
-  runSSETargetTests(() => new MemorySSETarget("/sse"));
+describe("MemoryEventStore", () => {
+  runSSETargetTests(() => new MemoryEventStore());
 });

@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 
+import { type EventStore } from "./EventStore";
+
 export type ServerSentEvent = {
   type: string;
 };
@@ -13,15 +15,13 @@ export type ServerSentEventWithId<E extends ServerSentEvent> = E & {
  * Receives events and dispatches them to connected EventSource clients.
  *
  * New clients will receive previously dispatched events.
- *
- * *IMPORTANT:* This class is meant to be subclassed, overriding storeEvent and getEvents.
- * The default implementation stores events in memory, which may cause out of memory errors.
  */
-export abstract class SSETarget<E extends ServerSentEvent> {
+export class SSETarget<E extends ServerSentEvent> {
   private eventResolvers: Array<() => void> = [];
 
   constructor(
     private readonly ssePath: string,
+    private readonly eventStore: EventStore<E>,
     private readonly pingIntervalMillis = 10_000,
   ) {}
 
@@ -30,15 +30,11 @@ export abstract class SSETarget<E extends ServerSentEvent> {
    * @param event the event object to dispatch.
    */
   async dispatchEvent(event: E) {
-    await this.storeEvent(event);
+    await this.eventStore.storeEvent(event);
 
     // Notify waiting streams about the new event
     this.notifyNewEvent();
   }
-
-  protected abstract storeEvent(event: E): Promise<void>;
-
-  protected abstract getEvents(lastEventId: number): Promise<readonly ServerSentEventWithId<E>[]>;
 
   async fetch(request: Request) {
     const app = new Hono<{ Bindings: Env }>();
@@ -69,7 +65,7 @@ export abstract class SSETarget<E extends ServerSentEvent> {
         }
 
         while (loop) {
-          const newEvents = await this.getEvents(lastEventId);
+          const newEvents = await this.eventStore.getEvents(lastEventId);
 
           for (const event of newEvents) {
             const { id, type, ...rest } = event;

@@ -1,1 +1,1 @@
-export * from "./RedisSSETarget";
+export * from "./RedisEventStore";

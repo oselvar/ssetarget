@@ -1,2 +1,3 @@
-export * from "./MemorySSETarget";
+export * from "./EventStore";
+export * from "./MemoryEventStore";
 export * from "./SSETarget";

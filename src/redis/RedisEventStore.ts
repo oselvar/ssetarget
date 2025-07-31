@@ -1,23 +1,21 @@
 import type Redis from "ioredis";
 
-import { type ServerSentEvent, type ServerSentEventWithId, SSETarget } from "../SSETarget";
+import { type EventStore } from "../EventStore";
+import { type ServerSentEvent, type ServerSentEventWithId } from "../SSETarget";
 
-export class RedisSSETarget<E extends ServerSentEvent> extends SSETarget<E> {
+export class RedisEventStore<E extends ServerSentEvent> implements EventStore<E> {
   private readonly eventsKey: string;
   private readonly counterKey: string;
 
   constructor(
-    ssePath: string,
     private readonly redis: Redis,
     keyPrefix = "ssetarget",
-    pingIntervalMillis = 10_000,
   ) {
-    super(ssePath, pingIntervalMillis);
     this.eventsKey = `${keyPrefix}:events`;
     this.counterKey = `${keyPrefix}:counter`;
   }
 
-  protected override async storeEvent(event: E): Promise<void> {
+  async storeEvent(event: E): Promise<void> {
     const results = await this.redis.pipeline().incr(this.counterKey).exec();
     if (results) {
       const [[, eventId]] = results as [[null, number]];
@@ -25,9 +23,7 @@ export class RedisSSETarget<E extends ServerSentEvent> extends SSETarget<E> {
     }
   }
 
-  protected override async getEvents(
-    lastEventId: number,
-  ): Promise<readonly ServerSentEventWithId<E>[]> {
+  async getEvents(lastEventId: number): Promise<readonly ServerSentEventWithId<E>[]> {
     const eventStrings = await this.redis.zrangebyscore(
       this.eventsKey,
       lastEventId + 1,

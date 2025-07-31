@@ -2,9 +2,9 @@ import { Redis } from "ioredis";
 import { afterEach, beforeEach, describe } from "vitest";
 
 import { runSSETargetTests } from "../SSETargetTests";
-import { RedisSSETarget } from "./RedisSSETarget";
+import { RedisEventStore } from "./RedisEventStore";
 
-describe("RedisSSETarget", () => {
+describe("RedisEventStore", () => {
   let redis: Redis;
 
   beforeEach(async () => {
@@ -16,5 +16,5 @@ describe("RedisSSETarget", () => {
     await redis.quit();
   });
 
-  runSSETargetTests(() => new RedisSSETarget("/sse", redis));
+  runSSETargetTests(() => new RedisEventStore(redis));
 });

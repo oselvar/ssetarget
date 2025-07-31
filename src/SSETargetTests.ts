@@ -1,7 +1,8 @@
 import { createEventSource } from "eventsource-client";
 import { expect, it } from "vitest";
 
-import { type ServerSentEvent, type SSETarget } from "./SSETarget";
+import { type EventStore } from "./EventStore";
+import { type ServerSentEvent, SSETarget } from "./SSETarget";
 
 type TestEvent = ServerSentEvent & {
   thing: string;
@@ -28,9 +29,10 @@ function isEqual(event1: TestEvent, event2: TestEvent): boolean {
   return event1.type === event2.type && event1.thing == event2.thing;
 }
 
-export function runSSETargetTests(createSSETarget: () => SSETarget<TestEvent>) {
+export function runSSETargetTests(createEventStore: () => EventStore<TestEvent>) {
   it("should dispatch events to EventSource", async () => {
-    const sse = createSSETarget();
+    const eventStore = createEventStore();
+    const sse = new SSETarget("/sse", eventStore);
 
     for (const event of events) {
       await sse.dispatchEvent(event);
@@ -60,7 +62,8 @@ export function runSSETargetTests(createSSETarget: () => SSETarget<TestEvent>) {
   });
 
   it("should dispatch events to EventSource with lastEventId", async () => {
-    const sse = createSSETarget();
+    const eventStore = createEventStore();
+    const sse = new SSETarget("/sse", eventStore);
 
     for (const event of events) {
       await sse.dispatchEvent(event);
