@@ -6,7 +6,7 @@ Events are persisted, allowing clients to receive previous events - with support
 Dispatch events:
 
 ```typescript
-const eventStore = new MemoryEventStore() // Or use RedisEventStore
+const eventStore = new MemoryEventStore(); // Or use RedisEventStore
 const sse = new SSETarget("/sse", eventStore);
 
 await sse.dispatchEvent({
