@@ -1,5 +1,5 @@
 import { createEventSource } from "eventsource-client";
-import { describe, expect, it } from "vitest";
+import { expect, it } from "vitest";
 
 import { type ServerSentEvent, type SSETarget } from "./SSETarget";
 
@@ -28,70 +28,68 @@ function isEqual(event1: TestEvent, event2: TestEvent): boolean {
   return event1.type === event2.type && event1.thing == event2.thing;
 }
 
-export function runSSETargetTests(name: string, createSSETarget: () => SSETarget<TestEvent>) {
-  describe(name, () => {
-    it("should dispatch events to EventSource", async () => {
-      const sse = createSSETarget();
+export function runSSETargetTests(createSSETarget: () => SSETarget<TestEvent>) {
+  it("should dispatch events to EventSource", async () => {
+    const sse = createSSETarget();
 
-      for (const event of events) {
-        sse.dispatchEvent(event);
-      }
+    for (const event of events) {
+      await sse.dispatchEvent(event);
+    }
 
-      const receivedEvents: TestEvent[] = [];
+    const receivedEvents: TestEvent[] = [];
 
-      await new Promise<void>((resolve, _reject) => {
-        const es = createEventSource({
-          url: "http://0.0.0.0/sse",
-          fetch: (url) => {
-            const req = new Request(url);
-            return sse.fetch(req);
-          },
-          onMessage({ event, data }) {
-            const reconstructedEvent = { ...JSON.parse(data), type: event };
-            receivedEvents.push(reconstructedEvent);
-            if (isEqual(reconstructedEvent, lastEvent)) {
-              es.close();
-              resolve();
-            }
-          },
-        });
+    await new Promise<void>((resolve, _reject) => {
+      const es = createEventSource({
+        url: "http://0.0.0.0/sse",
+        fetch: (url) => {
+          const req = new Request(url);
+          return sse.fetch(req);
+        },
+        onMessage({ event, data }) {
+          const reconstructedEvent = { ...JSON.parse(data), type: event };
+          receivedEvents.push(reconstructedEvent);
+          if (isEqual(reconstructedEvent, lastEvent)) {
+            es.close();
+            resolve();
+          }
+        },
       });
-
-      expect(receivedEvents).toEqual(events);
     });
 
-    it("should dispatch events to EventSource with lastEventId", async () => {
-      const sse = createSSETarget();
+    expect(receivedEvents).toEqual(events);
+  });
 
-      for (const event of events) {
-        sse.dispatchEvent(event);
-      }
+  it("should dispatch events to EventSource with lastEventId", async () => {
+    const sse = createSSETarget();
 
-      const receivedEvents: TestEvent[] = [];
+    for (const event of events) {
+      await sse.dispatchEvent(event);
+    }
 
-      await new Promise<void>((resolve, _reject) => {
-        const es = createEventSource({
-          url: "http://0.0.0.0/sse",
-          fetch: (url) => {
-            const req = new Request(url, {
-              headers: {
-                "Last-Event-ID": "1",
-              },
-            });
-            return sse.fetch(req);
-          },
-          onMessage({ event, data }) {
-            const reconstructedEvent = { ...JSON.parse(data), type: event };
-            receivedEvents.push(reconstructedEvent);
-            if (isEqual(reconstructedEvent, lastEvent)) {
-              es.close();
-              resolve();
-            }
-          },
-        });
+    const receivedEvents: TestEvent[] = [];
+
+    await new Promise<void>((resolve, _reject) => {
+      const es = createEventSource({
+        url: "http://0.0.0.0/sse",
+        fetch: (url) => {
+          const req = new Request(url, {
+            headers: {
+              "Last-Event-ID": "1",
+            },
+          });
+          return sse.fetch(req);
+        },
+        onMessage({ event, data }) {
+          const reconstructedEvent = { ...JSON.parse(data), type: event };
+          receivedEvents.push(reconstructedEvent);
+          if (isEqual(reconstructedEvent, lastEvent)) {
+            es.close();
+            resolve();
+          }
+        },
       });
-
-      expect(receivedEvents).toEqual(events.slice(1));
     });
+
+    expect(receivedEvents).toEqual(events.slice(1));
   });
 }

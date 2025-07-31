@@ -38,7 +38,7 @@ class DurableObjectSSETarget extends SSETarget<StepEvent> {
     );`);
   }
 
-  override storeEvent(event: StepEvent) {
+  override async storeEvent(event: StepEvent): Promise<void> {
     const sql = this.ctx.storage.sql;
     const query = `INSERT INTO events (taskId, type, step, timestamp, error) VALUES (?, ?, ?, ?, ?)`;
     sql.exec(query, ...[event.taskId, event.type, event.step, event.timestamp, event.error]);

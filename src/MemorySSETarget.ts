@@ -3,7 +3,7 @@ import { type ServerSentEvent, type ServerSentEventWithId, SSETarget } from "./S
 export class MemorySSETarget<E extends ServerSentEvent> extends SSETarget<E> {
   private events: ServerSentEventWithId<E>[] = [];
 
-  protected override storeEvent(event: E): void {
+  protected override async storeEvent(event: E): Promise<void> {
     this.events.push({ ...event, id: this.events.length + 1 });
   }
 

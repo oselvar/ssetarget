@@ -29,14 +29,14 @@ export abstract class SSETarget<E extends ServerSentEvent> {
    * Dispatches an event to connected EventSource clients.
    * @param event the event object to dispatch.
    */
-  dispatchEvent(event: E) {
-    this.storeEvent(event);
+  async dispatchEvent(event: E) {
+    await this.storeEvent(event);
 
     // Notify waiting streams about the new event
     this.notifyNewEvent();
   }
 
-  protected abstract storeEvent(event: E): void;
+  protected abstract storeEvent(event: E): Promise<void>;
 
   protected abstract getEvents(lastEventId: number): Promise<readonly ServerSentEventWithId<E>[]>;
 
