@@ -1,6 +1,6 @@
 import type Redis from "ioredis";
 
-import { type ServerSentEvent, type ServerSentEventWithId, SSETarget } from "./SSETarget";
+import { type ServerSentEvent, type ServerSentEventWithId, SSETarget } from "../SSETarget";
 
 export class RedisSSETarget<E extends ServerSentEvent> extends SSETarget<E> {
   private readonly eventsKey: string;

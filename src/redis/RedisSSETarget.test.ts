@@ -1,8 +1,8 @@
 import { Redis } from "ioredis";
 import { afterEach, beforeEach, describe } from "vitest";
 
+import { runSSETargetTests } from "../SSETargetTests";
 import { RedisSSETarget } from "./RedisSSETarget";
-import { runSSETargetTests } from "./SSETargetTests";
 
 describe("RedisSSETarget", () => {
   let redis: Redis;
