@@ -9,8 +9,3 @@ export type StepEvent = {
 };
 
 export type StepEventWithId = ServerSentEventWithId<StepEvent>;
-
-/**
- * Whether or not to send an event notification for a given step
- */
-export type ShouldDispatch = (step: string) => boolean;

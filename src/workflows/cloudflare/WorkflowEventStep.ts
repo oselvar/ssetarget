@@ -6,8 +6,12 @@ import type {
   WorkflowTimeoutDuration,
 } from "cloudflare:workers";
 
-import type { ShouldDispatch } from "..";
 import type { DispatchEvent } from "./batchedDispatchEvent";
+
+/**
+ * Whether or not to send an event notification for a given step
+ */
+export type ShouldDispatch = (step: string) => boolean;
 
 export class WorkflowEventStep implements WorkflowStep {
   constructor(
