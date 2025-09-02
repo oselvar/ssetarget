@@ -17,28 +17,15 @@ export type ServerSentEventWithId<E extends ServerSentEvent> = E & {
  * New clients will receive previously dispatched events.
  */
 export class SSETarget<E extends ServerSentEvent> {
+  private readonly app: Hono;
   private eventResolvers: Array<() => void> = [];
 
   constructor(
-    private readonly ssePath: string,
+    private ssePath: string,
     private readonly eventStore: EventStore<E>,
-    private readonly pingIntervalMillis = 10_000,
-  ) {}
-
-  /**
-   * Dispatches an event to connected EventSource clients.
-   * @param event the event object to dispatch.
-   */
-  async dispatchEvent(event: E) {
-    await this.eventStore.storeEvent(event);
-
-    // Notify waiting streams about the new event
-    this.notifyNewEvent();
-  }
-
-  async fetch(request: Request) {
-    const app = new Hono<{ Bindings: Env }>();
-    app.get(this.ssePath, (c) => {
+    private pingIntervalMillis = 10_000,
+  ) {
+    this.app = new Hono().get(this.ssePath, (c) => {
       return streamSSE(c, async (stream) => {
         const ping = setInterval(() => {
           stream.writeSSE({ event: "ping", data: "" }).catch((err) => {
@@ -81,8 +68,21 @@ export class SSETarget<E extends ServerSentEvent> {
         }
       });
     });
+  }
 
-    return app.fetch(request);
+  /**
+   * Dispatches an event to connected EventSource clients.
+   * @param event the event object to dispatch.
+   */
+  async dispatchEvent(event: E) {
+    await this.eventStore.storeEvent(event);
+
+    // Notify waiting streams about the new event
+    this.notifyNewEvent();
+  }
+
+  async fetch(request: Request) {
+    return this.app.fetch(request);
   }
 
   private notifyNewEvent() {
