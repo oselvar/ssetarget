@@ -5,21 +5,16 @@ import { type EventStore } from "./EventStore";
 
 export type ServerSentEvent = {
   type: string;
-  id?: never;
-};
-
-export type ServerSentEventWithId<E extends ServerSentEvent> = Omit<E, "id"> & {
-  id: number;
+  id?: number;
 };
 
 /**
  * Receives events and dispatches them to connected EventSource clients.
- *
- * New clients will receive previously dispatched events.
  */
 export class SSETarget<E extends ServerSentEvent> {
   private readonly app: Hono;
-  private eventResolvers: Array<() => void> = [];
+  private eventResolvers: Array<(event: readonly E[]) => void> = [];
+  private pendingEvents: E[] = [];
 
   constructor(
     private ssePath: string,
@@ -42,30 +37,34 @@ export class SSETarget<E extends ServerSentEvent> {
         });
 
         const lastEventIdHeader = c.req.header("Last-Event-ID");
-        let lastEventId = 0;
 
         if (lastEventIdHeader) {
-          lastEventId = parseInt(lastEventIdHeader, 10);
-          if (isNaN(lastEventId)) {
-            // Start from the event after the last received event
-            lastEventId = 0;
+          const lastEventId = parseInt(lastEventIdHeader, 10);
+          if (!isNaN(lastEventId)) {
+            const storedEvents = await this.eventStore.getEvents(lastEventId);
+
+            for (const event of storedEvents) {
+              const { id, type, ...rest } = event;
+              await stream.writeSSE({
+                id: id === undefined ? undefined : String(id),
+                event: type,
+                data: JSON.stringify(rest),
+              });
+            }
           }
         }
 
         while (loop) {
-          const newEvents = await this.eventStore.getEvents(lastEventId);
+          const events = await this.waitForNewEvents();
 
-          for (const event of newEvents) {
+          for (const event of events) {
             const { id, type, ...rest } = event;
             await stream.writeSSE({
-              id: String(id),
+              id: id === undefined ? undefined : String(id),
               event: type,
               data: JSON.stringify(rest),
             });
-            lastEventId = id;
           }
-
-          await this.waitForNewEvent();
         }
       });
     });
@@ -76,24 +75,34 @@ export class SSETarget<E extends ServerSentEvent> {
    * @param event the event object to dispatch.
    */
   async dispatchEvent(event: E) {
-    await this.eventStore.storeEvent(event);
+    const eventWithId = await this.eventStore.storeEvent(event);
 
     // Notify waiting streams about the new event
-    this.notifyNewEvent();
+    this.notifyNewEvent(eventWithId);
   }
 
   async fetch(request: Request) {
     return this.app.fetch(request);
   }
 
-  private notifyNewEvent() {
-    // Resolve all waiting promises
-    const resolvers = this.eventResolvers;
-    this.eventResolvers = [];
-    resolvers.forEach((resolve) => resolve());
+  private notifyNewEvent(event: E) {
+    // Resolve all waiting promises with the new event
+    if (this.eventResolvers.length > 0) {
+      const resolvers = this.eventResolvers;
+      this.eventResolvers = [];
+      resolvers.forEach((resolve) => resolve([event]));
+    } else {
+      // Only store pending events if there are no waiting resolvers
+      this.pendingEvents.push(event);
+    }
   }
 
-  private waitForNewEvent(): Promise<void> {
+  private waitForNewEvents(): Promise<readonly E[]> {
+    if (this.pendingEvents.length > 0) {
+      const eventsToReturn = [...this.pendingEvents];
+      this.pendingEvents = [];
+      return Promise.resolve(eventsToReturn);
+    }
     return new Promise((resolve) => this.eventResolvers.push(resolve));
   }
 }

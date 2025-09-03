@@ -1,6 +1,5 @@
 import { type EventStore } from "../../EventStore";
-import { type ServerSentEventWithId } from "../../SSETarget";
-import type { StepEvent, StepEventWithId } from "..";
+import type { StepEvent } from "..";
 
 export class StepEventStore implements EventStore<StepEvent> {
   constructor(private readonly ctx: DurableObjectState) {
@@ -16,16 +15,24 @@ export class StepEventStore implements EventStore<StepEvent> {
     );`);
   }
 
-  async storeEvent(event: StepEvent): Promise<void> {
+  async storeEvent(event: StepEvent): Promise<StepEvent> {
     const sql = this.ctx.storage.sql;
-    const query = `INSERT INTO events (taskId, type, step, timestamp, error) VALUES (?, ?, ?, ?, ?)`;
-    sql.exec(query, ...[event.taskId, event.type, event.step, event.timestamp, event.error]);
+    const query = `INSERT INTO events (taskId, type, step, timestamp, error) VALUES (?, ?, ?, ?, ?) RETURNING id`;
+    const result = sql.exec(
+      query,
+      ...[event.taskId, event.type, event.step, event.timestamp, event.error],
+    );
+    const row = result.one();
+    if (!row) {
+      throw new Error("Failed to insert event");
+    }
+    return { ...event, id: row["id"] as number } as StepEvent;
   }
 
-  async getEvents(lastEventId: number): Promise<readonly ServerSentEventWithId<StepEvent>[]> {
+  async getEvents(lastEventId: number): Promise<readonly StepEvent[]> {
     const sql = this.ctx.storage.sql;
     return sql
-      .exec<StepEventWithId>("SELECT * FROM events WHERE id > ? ORDER BY id ASC", lastEventId)
+      .exec<StepEvent>("SELECT * FROM events WHERE id > ? ORDER BY id ASC", lastEventId)
       .toArray();
   }
 }

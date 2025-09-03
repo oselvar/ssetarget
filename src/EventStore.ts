@@ -1,6 +1,6 @@
-import { type ServerSentEvent, type ServerSentEventWithId } from "./SSETarget";
+import { type ServerSentEvent } from "./SSETarget";
 
 export interface EventStore<E extends ServerSentEvent> {
-  storeEvent(event: E): Promise<void>;
-  getEvents(lastEventId: number): Promise<readonly ServerSentEventWithId<E>[]>;
+  storeEvent(event: E): Promise<E>;
+  getEvents(lastEventId: number): Promise<readonly E[]>;
 }

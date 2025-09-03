@@ -2,6 +2,7 @@ import { createEventSource } from "eventsource-client";
 import { expect, it } from "vitest";
 
 import { type EventStore } from "./EventStore";
+import { NullEventStore } from "./NullEventStore";
 import { type ServerSentEvent, SSETarget } from "./SSETarget";
 
 type TestEvent = ServerSentEvent & {
@@ -34,18 +35,24 @@ export function runSSETargetTests(createEventStore: () => EventStore<TestEvent>)
     const eventStore = createEventStore();
     const sse = new SSETarget("/sse", eventStore);
 
-    for (const event of events) {
-      await sse.dispatchEvent(event);
+    async function dispatchEvents() {
+      for (const event of events) {
+        await sse.dispatchEvent(event);
+      }
     }
 
     const receivedEvents: TestEvent[] = [];
 
-    await new Promise<void>((resolve, _reject) => {
+    await new Promise<void>((resolve, reject) => {
       const es = createEventSource({
         url: "http://0.0.0.0/sse",
         fetch: (url) => {
           const req = new Request(url);
           return sse.fetch(req);
+        },
+        onConnect() {
+          // Dispatch events *after* the EventSource connects
+          dispatchEvents().catch(reject);
         },
         onMessage({ event, data }) {
           const reconstructedEvent = { ...JSON.parse(data), type: event };
@@ -61,17 +68,23 @@ export function runSSETargetTests(createEventStore: () => EventStore<TestEvent>)
     expect(receivedEvents).toEqual(events);
   });
 
-  it("should dispatch events to EventSource with lastEventId", async () => {
+  it("should dispatch old events to EventSource with lastEventId", async () => {
     const eventStore = createEventStore();
+
+    if (eventStore instanceof NullEventStore) {
+      return;
+    }
+
     const sse = new SSETarget("/sse", eventStore);
 
+    // Dispatch events *before* the EventSource connects
     for (const event of events) {
       await sse.dispatchEvent(event);
     }
 
     const receivedEvents: TestEvent[] = [];
 
-    await new Promise<void>((resolve, _reject) => {
+    await new Promise<void>((resolve) => {
       const es = createEventSource({
         url: "http://0.0.0.0/sse",
         fetch: (url) => {
