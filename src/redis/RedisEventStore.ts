@@ -38,7 +38,7 @@ export class RedisEventStore<E extends ServerSentEvent> implements EventStore<E>
 
       if (eventJson) {
         const event = JSON.parse(eventJson) as E;
-        events.push({ ...event, id });
+        events.push({ ...event, id } as ServerSentEventWithId<E>);
       }
     }
 

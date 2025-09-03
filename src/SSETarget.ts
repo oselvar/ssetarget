@@ -5,9 +5,10 @@ import { type EventStore } from "./EventStore";
 
 export type ServerSentEvent = {
   type: string;
+  id?: never;
 };
 
-export type ServerSentEventWithId<E extends ServerSentEvent> = E & {
+export type ServerSentEventWithId<E extends ServerSentEvent> = Omit<E, "id"> & {
   id: number;
 };
 
