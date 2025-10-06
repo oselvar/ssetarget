@@ -36,21 +36,19 @@ export class SSETarget<E extends ServerSentEvent> {
           clearInterval(ping);
         });
 
-        const lastEventIdHeader = c.req.header("Last-Event-ID");
+        const lastEventIdHeader = c.req.header("Last-Event-ID") || "0";
 
-        if (lastEventIdHeader) {
-          const lastEventId = parseInt(lastEventIdHeader, 10);
-          if (!isNaN(lastEventId)) {
-            const storedEvents = await this.eventStore.getEvents(lastEventId);
+        const lastEventId = parseInt(lastEventIdHeader, 10);
+        if (!isNaN(lastEventId)) {
+          const storedEvents = await this.eventStore.getEvents(lastEventId);
 
-            for (const event of storedEvents) {
-              const { id, type, ...rest } = event;
-              await stream.writeSSE({
-                id: id === undefined ? undefined : String(id),
-                event: type,
-                data: JSON.stringify(rest),
-              });
-            }
+          for (const event of storedEvents) {
+            const { id, type, ...rest } = event;
+            await stream.writeSSE({
+              id: id === undefined ? undefined : String(id),
+              event: type,
+              data: JSON.stringify(rest),
+            });
           }
         }
 
