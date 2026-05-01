@@ -1,5 +1,7 @@
+import type { IncomingMessage } from "node:http";
+
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
+import { type SSEStreamingApi, streamSSE } from "hono/streaming";
 
 import { type EventStore } from "./EventStore";
 
@@ -22,9 +24,20 @@ export class SSETarget<E extends ServerSentEvent> {
     private pingIntervalMillis = 10_000,
   ) {
     this.app = new Hono().get(this.ssePath, (c) => {
+      // Tell nginx (and several CDN proxies) not to buffer the SSE response.
+      c.header("X-Accel-Buffering", "no");
+
+      // When running on @hono/node-server, disable Nagle's algorithm so each
+      // chunk written to the response is sent on the wire immediately instead
+      // of being coalesced by the kernel TCP stack. No-op on runtimes that
+      // don't expose a Node socket (e.g. Cloudflare Workers).
+      const incoming = (c.env as { incoming?: IncomingMessage } | undefined)
+        ?.incoming;
+      incoming?.socket?.setNoDelay(true);
+
       return streamSSE(c, async (stream) => {
         const ping = setInterval(() => {
-          stream.writeSSE({ event: "ping", data: "" }).catch((err) => {
+          writeFlushed(stream, { event: "ping", data: "" }).catch((err) => {
             // eslint-disable-next-line no-console
             console.error("SSE Error writing ping", err);
           });
@@ -44,7 +57,7 @@ export class SSETarget<E extends ServerSentEvent> {
 
           for (const event of storedEvents) {
             const { id, type, ...rest } = event;
-            await stream.writeSSE({
+            await writeFlushed(stream, {
               id: id === undefined ? undefined : String(id),
               event: type,
               data: JSON.stringify(rest),
@@ -57,7 +70,7 @@ export class SSETarget<E extends ServerSentEvent> {
 
           for (const event of events) {
             const { id, type, ...rest } = event;
-            await stream.writeSSE({
+            await writeFlushed(stream, {
               id: id === undefined ? undefined : String(id),
               event: type,
               data: JSON.stringify(rest),
@@ -103,4 +116,17 @@ export class SSETarget<E extends ServerSentEvent> {
     }
     return new Promise((resolve) => this.eventResolvers.push(resolve));
   }
+}
+
+// Hono's streamSSE writes through a TransformStream whose readable side pulls
+// chunks lazily. Without a follow-up write, the last chunk sits queued until
+// the next writeSSE (e.g. the next ping) drains it. Writing a SSE comment line
+// (which clients ignore per the spec) right after the event forces the event
+// chunk through immediately.
+async function writeFlushed(
+  stream: SSEStreamingApi,
+  message: Parameters<SSEStreamingApi["writeSSE"]>[0],
+): Promise<void> {
+  await stream.writeSSE(message);
+  await stream.write(": flush\n\n");
 }
