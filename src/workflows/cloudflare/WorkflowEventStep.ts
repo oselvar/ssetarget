@@ -1,12 +1,14 @@
 import type {
+  StepPromise,
   WorkflowSleepDuration,
   WorkflowStep,
   WorkflowStepConfig,
+  WorkflowStepContext,
   WorkflowStepEvent,
   WorkflowTimeoutDuration,
 } from "cloudflare:workers";
 
-import type { DispatchEvent } from "./batchedDispatchEvent";
+import type { DispatchEvent } from "./batchedDispatchEvent.js";
 
 /**
  * Whether or not to send an event notification for a given step
@@ -21,37 +23,53 @@ export class WorkflowEventStep implements WorkflowStep {
     private readonly shouldDispatch: ShouldDispatch = () => true,
   ) {}
 
-  async do<T extends Rpc.Serializable<T>>(
+  do<T extends Rpc.Serializable<T>>(
     name: string,
-    configOrTask: WorkflowStepConfig | (() => Promise<T>),
-    callback?: () => Promise<T>,
-  ): Promise<T> {
-    return this.withEvents(name, () =>
-      this.step.do(name, configOrTask as WorkflowStepConfig, callback as () => Promise<T>),
-    );
+    callback: (ctx: WorkflowStepContext) => Promise<T>,
+  ): StepPromise<T>;
+  do<T extends Rpc.Serializable<T>>(
+    name: string,
+    config: WorkflowStepConfig,
+    callback: (ctx: WorkflowStepContext) => Promise<T>,
+  ): StepPromise<T>;
+  do<T extends Rpc.Serializable<T>>(
+    name: string,
+    configOrCallback: WorkflowStepConfig | ((ctx: WorkflowStepContext) => Promise<T>),
+    maybeCallback?: (ctx: WorkflowStepContext) => Promise<T>,
+  ): StepPromise<T> {
+    const inner =
+      typeof configOrCallback === "function"
+        ? this.step.do<T>(name, configOrCallback)
+        : this.step.do<T>(
+            name,
+            configOrCallback,
+            maybeCallback as (ctx: WorkflowStepContext) => Promise<T>,
+          );
+    return withRollback(this.runWithEvents(name, inner), inner);
   }
 
-  async sleep(name: string, duration: WorkflowSleepDuration): Promise<void> {
-    return this.withEvents(name, () => this.step.sleep(name, duration));
+  sleep(name: string, duration: WorkflowSleepDuration): Promise<void> {
+    return this.runWithEvents(name, this.step.sleep(name, duration));
   }
 
-  async sleepUntil(name: string, timestamp: Date | number): Promise<void> {
-    return this.withEvents(name, () => this.step.sleepUntil(name, timestamp));
+  sleepUntil(name: string, timestamp: Date | number): Promise<void> {
+    return this.runWithEvents(name, this.step.sleepUntil(name, timestamp));
   }
 
-  async waitForEvent<T extends Rpc.Serializable<T>>(
+  waitForEvent<T extends Rpc.Serializable<T>>(
     name: string,
     options: {
       type: string;
       timeout?: WorkflowTimeoutDuration | number;
     },
-  ): Promise<WorkflowStepEvent<T>> {
-    return this.withEvents(name, () => this.step.waitForEvent(name, options));
+  ): StepPromise<WorkflowStepEvent<T>> {
+    const inner = this.step.waitForEvent<T>(name, options);
+    return withRollback(this.runWithEvents(name, inner), inner);
   }
 
-  private async withEvents<R>(step: string, callback: () => Promise<R>): Promise<R> {
+  private async runWithEvents<R>(step: string, inner: Promise<R>): Promise<R> {
     if (!this.shouldDispatch(step)) {
-      return callback();
+      return inner;
     }
     const taskId = crypto.randomUUID();
     await this.dispatchEvent(this.instanceId, {
@@ -62,7 +80,7 @@ export class WorkflowEventStep implements WorkflowStep {
     });
 
     try {
-      const result = await callback();
+      const result = await inner;
       await this.dispatchEvent(this.instanceId, {
         type: "completed",
         taskId,
@@ -81,4 +99,10 @@ export class WorkflowEventStep implements WorkflowStep {
       throw error;
     }
   }
+}
+
+function withRollback<R>(promise: Promise<R>, source: StepPromise<R>): StepPromise<R> {
+  const result = promise as StepPromise<R>;
+  result.rollback = source.rollback.bind(source);
+  return result;
 }

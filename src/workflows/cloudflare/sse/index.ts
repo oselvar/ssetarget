@@ -1,4 +1,4 @@
-import type { WorkflowEvents } from "../WorkflowEvents";
+import type { WorkflowEvents } from "../WorkflowEvents.js";
 
 export function serveSSE<T extends WorkflowEvents<object>>(
   instanceId: string,

@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 
-import { serveSSE } from "../workflows/cloudflare/sse";
-export { WorkflowEvents } from "../workflows/cloudflare/WorkflowEvents";
-export { DemoWorkflow } from "./DemoWorkflow";
+import { serveSSE } from "../workflows/cloudflare/sse/index.js";
+export { WorkflowEvents } from "../workflows/cloudflare/WorkflowEvents.js";
+export { DemoWorkflow } from "./DemoWorkflow.js";
 
 const app = new Hono<{ Bindings: Env }>();
 

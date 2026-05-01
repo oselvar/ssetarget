@@ -1,5 +1,5 @@
-import { type EventStore } from "./EventStore";
-import { type ServerSentEvent } from "./SSETarget";
+import { type EventStore } from "./EventStore.js";
+import { type ServerSentEvent } from "./SSETarget.js";
 
 export class NullEventStore<E extends ServerSentEvent> implements EventStore<E> {
   async storeEvent(event: E): Promise<E> {

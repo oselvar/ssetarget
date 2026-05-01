@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 
-import { SSETarget } from "../../SSETarget";
-import type { StepEvent } from "..";
-import { StepEventStore } from "./StepEventStore";
+import { SSETarget } from "../../SSETarget.js";
+import type { StepEvent } from "../index.js";
+import { StepEventStore } from "./StepEventStore.js";
 
 export class WorkflowEvents<Env extends object> extends DurableObject<Env> {
   private sseTarget: SSETarget<StepEvent>;

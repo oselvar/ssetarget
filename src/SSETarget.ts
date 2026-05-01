@@ -3,7 +3,7 @@ import type { IncomingMessage } from "node:http";
 import { Hono } from "hono";
 import { type SSEStreamingApi, streamSSE } from "hono/streaming";
 
-import { type EventStore } from "./EventStore";
+import { type EventStore } from "./EventStore.js";
 
 export type ServerSentEvent = {
   type: string;
@@ -31,8 +31,7 @@ export class SSETarget<E extends ServerSentEvent> {
       // chunk written to the response is sent on the wire immediately instead
       // of being coalesced by the kernel TCP stack. No-op on runtimes that
       // don't expose a Node socket (e.g. Cloudflare Workers).
-      const incoming = (c.env as { incoming?: IncomingMessage } | undefined)
-        ?.incoming;
+      const incoming = (c.env as { incoming?: IncomingMessage } | undefined)?.incoming;
       incoming?.socket?.setNoDelay(true);
 
       return streamSSE(c, async (stream) => {

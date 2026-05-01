@@ -1,9 +1,9 @@
 import { createEventSource } from "eventsource-client";
 import { expect, it } from "vitest";
 
-import { type EventStore } from "./EventStore";
-import { NullEventStore } from "./NullEventStore";
-import { type ServerSentEvent, SSETarget } from "./SSETarget";
+import { type EventStore } from "./EventStore.js";
+import { NullEventStore } from "./NullEventStore.js";
+import { type ServerSentEvent, SSETarget } from "./SSETarget.js";
 
 type TestEvent = ServerSentEvent & {
   thing: string;

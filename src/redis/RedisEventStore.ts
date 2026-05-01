@@ -1,7 +1,7 @@
 import type Redis from "ioredis";
 
-import { type EventStore } from "../EventStore";
-import { type ServerSentEvent } from "../SSETarget";
+import { type EventStore } from "../EventStore.js";
+import { type ServerSentEvent } from "../SSETarget.js";
 
 export class RedisEventStore<E extends ServerSentEvent> implements EventStore<E> {
   private readonly eventsKey: string;

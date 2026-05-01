@@ -1,5 +1,5 @@
-import type { StepEvent } from "..";
-import type { WorkflowEvents } from "./WorkflowEvents";
+import type { StepEvent } from "../index.js";
+import type { WorkflowEvents } from "./WorkflowEvents.js";
 
 export type DispatchEvent = (instanceId: string, event: StepEvent) => Promise<void>;
 

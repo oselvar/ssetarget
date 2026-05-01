@@ -1,5 +1,5 @@
-import { type EventStore } from "../../EventStore";
-import type { StepEvent } from "..";
+import { type EventStore } from "../../EventStore.js";
+import type { StepEvent } from "../index.js";
 
 export class StepEventStore implements EventStore<StepEvent> {
   constructor(private readonly ctx: DurableObjectState) {

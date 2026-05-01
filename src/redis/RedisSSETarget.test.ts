@@ -1,8 +1,8 @@
 import { Redis } from "ioredis";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { runSSETargetTests } from "../SSETargetTests";
-import { RedisEventStore } from "./RedisEventStore";
+import { runSSETargetTests } from "../SSETargetTests.js";
+import { RedisEventStore } from "./RedisEventStore.js";
 
 describe("RedisEventStore", () => {
   let redis: Redis;

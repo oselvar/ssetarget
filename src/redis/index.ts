@@ -1,1 +1,1 @@
-export * from "./RedisEventStore";
+export * from "./RedisEventStore.js";
