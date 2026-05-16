@@ -1,6 +1,6 @@
 {
   "name": "@oselvar/ssetarget",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "Dispatch Server-Sent Events",
   "publishConfig": {
     "access": "public"

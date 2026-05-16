@@ -71,28 +71,33 @@ export class WorkflowEventStep implements WorkflowStep {
     if (!this.shouldDispatch(step)) {
       return inner;
     }
-    const taskId = crypto.randomUUID();
+    const spanId = `${this.instanceId}#${step}-${crypto.randomUUID()}`;
     await this.dispatchEvent(this.instanceId, {
       type: "started",
-      taskId,
-      step,
+      spanId,
+      parentSpanId: this.instanceId,
+      kind: "step",
+      name: step,
+      attributes: {},
       timestamp: new Date().toISOString(),
     });
 
     try {
       const result = await inner;
       await this.dispatchEvent(this.instanceId, {
-        type: "completed",
-        taskId,
-        step,
+        type: "ended",
+        spanId,
+        status: "completed",
+        attributes: {},
         timestamp: new Date().toISOString(),
       });
       return result;
     } catch (error) {
       await this.dispatchEvent(this.instanceId, {
-        type: "failed",
-        taskId,
-        step,
+        type: "ended",
+        spanId,
+        status: "failed",
+        attributes: {},
         timestamp: new Date().toISOString(),
         error: error instanceof Error ? error.message : String(error),
       });

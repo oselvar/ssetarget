@@ -1,7 +1,7 @@
-import type { StepEvent } from "../index.js";
+import type { SpanEvent } from "../index.js";
 import type { WorkflowEvents } from "./WorkflowEvents.js";
 
-export type DispatchEvent = (instanceId: string, event: StepEvent) => Promise<void>;
+export type DispatchEvent = (instanceId: string, event: SpanEvent) => Promise<void>;
 
 export function synchronousDispatchEvent<T extends WorkflowEvents<object>>(
   ctx: ExecutionContext,
@@ -28,22 +28,19 @@ export function batchedDispatchEvent<T extends WorkflowEvents<object>>(
   workflowEventsNs: DurableObjectNamespace<T>,
   delay: number,
 ): DispatchEvent {
-  const batchedEvents: Record<string, StepEvent[]> = {};
+  const batchedEvents: Record<string, SpanEvent[]> = {};
   const pendingTimers: Record<string, NodeJS.Timeout> = {};
 
   return async (runId, event) => {
-    // Atomically add event to batch
     if (!batchedEvents[runId]) {
       batchedEvents[runId] = [];
     }
     batchedEvents[runId].push(event);
 
-    // Only set up timer if one doesn't already exist
     if (!pendingTimers[runId]) {
       const timerPromise = new Promise<void>((resolve, reject) => {
         pendingTimers[runId] = setTimeout(async () => {
           try {
-            // Atomically extract and clear the batch
             const events = batchedEvents[runId] || [];
             delete batchedEvents[runId];
             delete pendingTimers[runId];

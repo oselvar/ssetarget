@@ -1,19 +1,19 @@
 import { DurableObject } from "cloudflare:workers";
 
 import { SSETarget } from "../../SSETarget.js";
-import type { StepEvent } from "../index.js";
-import { StepEventStore } from "./StepEventStore.js";
+import type { SpanEvent } from "../index.js";
+import { SpanEventStore } from "./StepEventStore.js";
 
 export class WorkflowEvents<Env extends object> extends DurableObject<Env> {
-  private sseTarget: SSETarget<StepEvent>;
+  private sseTarget: SSETarget<SpanEvent>;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    const eventStore = new StepEventStore(ctx);
+    const eventStore = new SpanEventStore(ctx);
     this.sseTarget = new SSETarget("*", eventStore);
   }
 
-  async dispatchEvent(event: StepEvent | readonly StepEvent[]) {
+  async dispatchEvent(event: SpanEvent | readonly SpanEvent[]) {
     const eventsArray = Array.isArray(event) ? event : [event];
     for (const event of eventsArray) {
       await this.sseTarget.dispatchEvent(event);
