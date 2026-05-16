@@ -2,7 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 
 import { SSETarget } from "../../SSETarget.js";
 import type { SpanEvent } from "../index.js";
-import { SpanEventStore } from "./StepEventStore.js";
+import { SpanEventStore } from "./SpanEventStore.js";
 
 export class WorkflowEvents<Env extends object> extends DurableObject<Env> {
   private sseTarget: SSETarget<SpanEvent>;

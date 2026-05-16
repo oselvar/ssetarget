@@ -1,36 +1,72 @@
 # SSETarget
 
-`@oselvar/ssetarget` dispatches Server-Sent Events to `EventSource` clients. It honours the `Last-Event-ID` header so reconnecting (or freshly connecting) clients resume from where they left off rather than missing past events.
+`@oselvar/ssetarget` is a library for **live workflow observability over Server-Sent Events**. You instrument your workflows with hierarchical span events (modelled after [OpenTelemetry](https://opentelemetry.io/)), and the library streams them to `EventSource` clients with full replay support — late or reconnecting clients catch up via the `Last-Event-ID` header.
 
-## What it is
+It works in two layers:
 
-Conceptually: a typed `EventTarget` whose dispatches are written to a pluggable `EventStore` and exposed over HTTP using the SSE wire protocol. New or reconnecting clients receive previously stored events (subject to `Last-Event-ID`) before joining the live stream.
+- **The SSE core** (`SSETarget` + `EventStore`) — a typed event-fanout primitive that persists every dispatched event and serves it over the SSE wire protocol. Useful on its own for any event-stream-to-browser use case.
+- **The workflow layer** (`Tracer` + `WorkflowEventStep`) — a small, OTel-aligned span model on top of the core, with a ready-to-use bridge for [Cloudflare Workflows](https://developers.cloudflare.com/workflows/).
 
-If you don't want any persistence, plug in `NullEventStore` and the behaviour collapses to plain `EventTarget` semantics — late listeners only see new events.
+## Why spans?
 
-## Quick start
+Workflows are deeply nested: a workflow runs steps; steps can have iterations; iterations may include human-in-the-loop pauses. A flat list of "step started / step finished" loses that structure.
+
+A span captures one unit of work, and every span knows its parent. That's enough to render a tree, compute durations, and roll up status — same idea OpenTelemetry uses for distributed tracing.
+
+## Concepts
+
+A span is two events on the wire: a `started` event when work begins and an `ended` event when it finishes (successfully or not).
 
 ```ts
-import { SSETarget, MemoryEventStore } from "@oselvar/ssetarget";
+type SpanStartedEvent = {
+  type: "started";
+  traceId: string; // groups spans belonging to the same workflow instance
+  spanId: string; // unique id for this span
+  parentSpanId: string | null; // null for the root span
+  name: string;
+  attributes: JsonObject;
+  timestamp: string;
+};
 
-const sse = new SSETarget("/sse", new MemoryEventStore());
-
-await sse.dispatchEvent({ type: "started" });
-
-// Inside an HTTP handler that takes a `Request`:
-function handleRequest(req: Request) {
-  return sse.fetch(req);
-}
+type SpanEndedEvent = {
+  type: "ended";
+  traceId: string;
+  spanId: string;
+  status: { code: "OK" } | { code: "ERROR"; message?: string };
+  attributes: JsonObject;
+  timestamp: string;
+};
 ```
 
-Events must extend `ServerSentEvent` (`{ type: string; id?: number }`); the store assigns the `id`.
+The field names mirror OpenTelemetry so you can write a thin adapter to OTLP if you ever need to forward spans to Jaeger, Tempo, Honeycomb, etc. The library itself has no OTel SDK dependency.
 
-## Event stores
+## Quick start (platform-agnostic)
 
-`SSETarget` is generic over an `EventStore`. The library ships three:
+Wrap async work in `tracer.withSpan(...)` and the library emits `started` + `ended` for you:
+
+```ts
+import { MemoryEventStore, SSETarget } from "@oselvar/ssetarget";
+import { Tracer, type SpanEvent } from "@oselvar/ssetarget/workflows";
+
+const sse = new SSETarget<SpanEvent>("/sse", new MemoryEventStore<SpanEvent>());
+const tracer = new Tracer((event) => sse.dispatchEvent(event), "my-trace-id");
+
+await tracer.withSpan({ spanId: "root", parentSpanId: null, name: "ingest" }, async (span) => {
+  await tracer.withSpan({ spanId: "extract", parentSpanId: "root", name: "extract" }, async () => {
+    // ...
+  });
+  span.setAttributes({ filesProcessed: 42 });
+});
+```
+
+Inside the callback you get a `SpanHandle` whose `setAttributes(...)` patches attributes that show up on the `ended` event. The `started` event captures a snapshot at the moment the span begins.
+
+## Streaming to clients
+
+`SSETarget<SpanEvent>` is the HTTP-facing piece. Combine it with an `EventStore` to control persistence and replay behaviour:
 
 - **`MemoryEventStore`** (`@oselvar/ssetarget`) — keeps every event in memory. Good for a single-process server or local development.
-- **`NullEventStore`** (`@oselvar/ssetarget`) — stores nothing. Reconnecting clients get only new events. Use this when you want pure `EventTarget` semantics.
+- **`NullEventStore`** (`@oselvar/ssetarget`) — stores nothing. Reconnecting clients only see new events. Use when you want pure `EventTarget` semantics.
 - **`RedisEventStore`** (`@oselvar/ssetarget/redis`) — persists events in Redis with monotonic IDs. Good for horizontally scaled deployments.
 
 ```ts
@@ -45,13 +81,39 @@ Implement the `EventStore<E>` interface to plug in any other backing store.
 
 ## Cloudflare Workflows
 
-The library was originally built to emit progress events from [Cloudflare Workflows](https://developers.cloudflare.com/workflows/), so `EventSource` clients can be notified as workflow steps start, complete, or fail.
+The Cloudflare bridge wires up the tracer for you and emits a root span for the entire workflow instance:
 
-The relevant pieces:
-
-- `WorkflowEvents` (`@oselvar/ssetarget/workflows/cloudflare`) — a Durable Object that stores step events in SQLite and serves the SSE stream.
-- `WorkflowEventStep` (`@oselvar/ssetarget/workflows/cloudflare`) — wraps a `WorkflowStep` so each `do` / `sleep` / `waitForEvent` call automatically dispatches `started`, `completed`, or `failed` events.
+- `WorkflowEvents` (`@oselvar/ssetarget/workflows/cloudflare`) — a Durable Object that persists span events in SQLite and serves the SSE stream.
+- `WorkflowEventStep` (`@oselvar/ssetarget/workflows/cloudflare`) — wraps a `WorkflowStep`. `withWorkflow(name, fn)` emits the root span; every `do` / `sleep` / `sleepUntil` / `waitForEvent` call inside emits a child span.
 - `serveSSE` (`@oselvar/ssetarget/workflows/cloudflare/sse`) — small helper that routes an HTTP request to the right `WorkflowEvents` instance.
+
+```ts
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
+import { batchedDispatchEvent } from "@oselvar/ssetarget/workflows/cloudflare";
+import { WorkflowEventStep } from "@oselvar/ssetarget/workflows/cloudflare";
+
+export class MyWorkflow extends WorkflowEntrypoint<Env> {
+  override async run(event: WorkflowEvent<unknown>, step: WorkflowStep) {
+    const eventStep = new WorkflowEventStep(
+      step,
+      event.instanceId,
+      batchedDispatchEvent(this.ctx, this.env.WORKFLOW_EVENTS, 5_000),
+    );
+
+    await eventStep.withWorkflow("MyWorkflow", async () => {
+      await eventStep.do("step-1", async () => {
+        /* ... */
+      });
+      await eventStep.sleep("wait", "5 second");
+      await eventStep.do("step-2", async () => {
+        /* ... */
+      });
+    });
+  }
+}
+```
+
+The root span's `spanId` is the workflow `instanceId`; child step spans use it as their `parentSpanId`. The `traceId` is the `instanceId` too, so all events from one workflow run are trivially grouped.
 
 See `src/examples/` and `wrangler.toml` for a working setup.
 
@@ -68,9 +130,39 @@ Listen to events from that workflow:
 
     curl http://localhost:9875/<instance-id>/sse
 
-The workflow runs a few steps, emits SSEs, and pauses on a `waitForEvent`. Trigger it to make the workflow resume:
+The workflow runs a few steps, emits spans, and pauses on a `waitForEvent`. Trigger it to make the workflow resume:
 
     curl -X POST http://localhost:9875/<instance-id>/event
+
+## Mapping to OpenTelemetry
+
+`SpanEvent` is an intentionally small subset of the OTel span shape — enough to render workflow trees in the browser, but easy to translate to OTLP if you want to export elsewhere.
+
+| `SpanEvent` field                             | OpenTelemetry equivalent                                          |
+| --------------------------------------------- | ----------------------------------------------------------------- |
+| `traceId`, `spanId`, `parentSpanId`           | Same (you'd switch hex strings of fixed length for OTLP).         |
+| `name`                                        | `Span.name`                                                       |
+| `attributes`                                  | `Span.attributes` (use OTel semantic conventions where they fit). |
+| `status: { code: "OK" \| "ERROR", message? }` | `Span.status` (no `UNSET` — spans are only emitted once ended).   |
+| `started` event                               | `OnStart` processor callback.                                     |
+| `ended` event                                 | `OnEnd` processor callback.                                       |
+
+What this library deliberately **does not** ship: span links, intra-span timestamped events (`Span.addEvent(...)`), `SpanKind` (`INTERNAL`/`CLIENT`/`SERVER`/...), and any exporter. They're additive — write them when you need them.
+
+## Migrating from 2.x
+
+Version 3.0 replaces the flat `StepEvent` model with the hierarchical `SpanEvent` model.
+
+| 2.x                                          | 3.x                                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `StepEvent`                                  | `SpanEvent` (`SpanStartedEvent \| SpanEndedEvent`)                                          |
+| `type: "started" \| "completed" \| "failed"` | `type: "started" \| "ended"`, plus `status: { code: "OK" \| "ERROR", message? }` on `ended` |
+| `taskId`, `step`                             | `spanId`, `name` (plus `traceId`, `parentSpanId`)                                           |
+| `StepEventStore`                             | `SpanEventStore` (file renamed)                                                             |
+| `WorkflowEventStep` only                     | `WorkflowEventStep` + new `withWorkflow(name, fn)` for the root span                        |
+| (no equivalent)                              | New `Tracer` class for platform-agnostic span dispatch                                      |
+
+If you have an existing UI consuming the 2.x events, the simplest migration is to update your event handler to switch on `type === "started"` vs `type === "ended"` and read `status.code` for success/failure.
 
 ## Prior art
 
@@ -81,3 +173,4 @@ The combination of "fan-out a stream" + "replay to late subscribers" appears in 
 - **SSE `Last-Event-ID`** ([WHATWG spec](https://html.spec.whatwg.org/multipage/server-sent-events.html)) — the wire-protocol version of the same idea: when the browser reconnects, it sends the last `id:` it saw and the server resumes from there. `SSETarget` implements this; the `EventStore` is what makes resumption possible across process restarts.
 - **Kafka**, **Redis Streams**, **NATS JetStream** — log-based message brokers with offset- or cursor-based replay.
 - **Event Sourcing** — events as the durable source of truth from which state is derived.
+- **OpenTelemetry** — the span/tracer model the workflow layer is built on; this library is intentionally a small subset for live in-browser observability.

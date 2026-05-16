@@ -8,6 +8,7 @@ import type {
   WorkflowTimeoutDuration,
 } from "cloudflare:workers";
 
+import { Tracer } from "../Tracer.js";
 import type { DispatchEvent } from "./batchedDispatchEvent.js";
 
 /**
@@ -16,12 +17,25 @@ import type { DispatchEvent } from "./batchedDispatchEvent.js";
 export type ShouldDispatch = (step: string) => boolean;
 
 export class WorkflowEventStep implements WorkflowStep {
+  private readonly tracer: Tracer;
+
   constructor(
     private readonly step: WorkflowStep,
     private readonly instanceId: string,
-    private readonly dispatchEvent: DispatchEvent,
+    dispatchEvent: DispatchEvent,
     private readonly shouldDispatch: ShouldDispatch = () => true,
-  ) {}
+  ) {
+    this.tracer = new Tracer((event) => dispatchEvent(instanceId, event), instanceId);
+  }
+
+  /**
+   * Wrap the workflow body so a root span is emitted for the whole instance.
+   * The root span's spanId is the workflow instanceId; child step spans
+   * reference it as their parentSpanId.
+   */
+  async withWorkflow<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    return this.tracer.withSpan({ spanId: this.instanceId, parentSpanId: null, name }, () => fn());
+  }
 
   do<T extends Rpc.Serializable<T>>(
     name: string,
@@ -67,42 +81,18 @@ export class WorkflowEventStep implements WorkflowStep {
     return withRollback(this.runWithEvents(name, inner), inner);
   }
 
-  private async runWithEvents<R>(step: string, inner: Promise<R>): Promise<R> {
-    if (!this.shouldDispatch(step)) {
+  private async runWithEvents<R>(name: string, inner: Promise<R>): Promise<R> {
+    if (!this.shouldDispatch(name)) {
       return inner;
     }
-    const spanId = `${this.instanceId}#${step}-${crypto.randomUUID()}`;
-    await this.dispatchEvent(this.instanceId, {
-      type: "started",
-      spanId,
-      parentSpanId: this.instanceId,
-      kind: "step",
-      name: step,
-      attributes: {},
-      timestamp: new Date().toISOString(),
-    });
-
-    try {
-      const result = await inner;
-      await this.dispatchEvent(this.instanceId, {
-        type: "ended",
-        spanId,
-        status: "completed",
-        attributes: {},
-        timestamp: new Date().toISOString(),
-      });
-      return result;
-    } catch (error) {
-      await this.dispatchEvent(this.instanceId, {
-        type: "ended",
-        spanId,
-        status: "failed",
-        attributes: {},
-        timestamp: new Date().toISOString(),
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw error;
-    }
+    return this.tracer.withSpan(
+      {
+        spanId: crypto.randomUUID(),
+        parentSpanId: this.instanceId,
+        name,
+      },
+      () => inner,
+    );
   }
 }
 
