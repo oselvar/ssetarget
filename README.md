@@ -120,7 +120,7 @@ See `src/examples/` and `wrangler.toml` for a working setup.
 ### Try the example
 
     # Terminal 1
-    npm start
+    pnpm start
 
 Start a workflow (the `Location` header contains the instance id):
 

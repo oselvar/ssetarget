@@ -22,6 +22,7 @@
   "license": "MIT",
   "author": "Aslak Hellesøy",
   "type": "module",
+  "packageManager": "pnpm@11.0.9",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -52,7 +53,7 @@
     "start": "wrangler dev --port 9875",
     "fix": "tsc && oxfmt && oxlint --fix .",
     "build": "tsc -p tsconfig.build.json",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "pnpm run build",
     "upgrade": "npm-check-updates --upgrade --deep"
   },
   "devDependencies": {

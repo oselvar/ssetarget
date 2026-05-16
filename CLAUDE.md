@@ -13,10 +13,11 @@ The library also contains utilities for dispatching events from Cloudflare Workf
 
 ### Development
 
-- `npm start` - Start the demo server with Wrangler (port 9875)
-- `npm test` - Run tests with Vitest
-- `npm run build` - Build the library with tsup
-- `npm run fix` - Run TypeScript check, format with Prettier, and lint with ESLint
+- `pnpm start` - Start the demo server with Wrangler (port 9875)
+- `pnpm test` - Run tests with Vitest
+- `pnpm build` - Build the library with tsc
+- `pnpm fix` - Run TypeScript check, format with oxfmt, and lint with oxlint
+- `pnpm install` - Install dependencies (this project uses pnpm; see `packageManager` in `package.json`)
 
 ### Testing
 
