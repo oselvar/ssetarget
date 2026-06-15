@@ -4,4 +4,4 @@
 
 ### Bug Fixes
 
-* adapt WorkflowEventStep to new Workflows API and decouple example types ([ab4361d](https://github.com/oselvar/ssetarget/commit/ab4361d24a493c8093e85a4ebd7343a307bc5599))
+- adapt WorkflowEventStep to new Workflows API and decouple example types ([ab4361d](https://github.com/oselvar/ssetarget/commit/ab4361d24a493c8093e85a4ebd7343a307bc5599))
