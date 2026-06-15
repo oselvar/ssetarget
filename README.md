@@ -1,6 +1,6 @@
 # SSETarget
 
-`@oselvar/ssetarget` is a library for **live workflow observability over Server-Sent Events**. You instrument your workflows with hierarchical span events (modelled after [OpenTelemetry](https://opentelemetry.io/)), and the library streams them to `EventSource` clients with full replay support — late or reconnecting clients catch up via the `Last-Event-ID` header.
+`@oselvar/ssetarget` is a library for **live workflow observability over Server-Sent Events**. You instrument your workflows with hierarchical span events (modelled after [OpenTelemetry](https://opentelemetry.io/)), and the library streams them to `EventSource` clients with full replay support — late or reconnecting clients catch up via the `Last-Event-ID` header (or a `lastEventId` query parameter on the initial connection).
 
 It works in two layers:
 
@@ -78,6 +78,20 @@ const sse = new SSETarget("/sse", new RedisEventStore(new Redis(), "my-prefix"))
 ```
 
 Implement the `EventStore<E>` interface to plug in any other backing store.
+
+### Resuming a stream
+
+With an `EventStore` configured, a client can resume from a known point so it only receives events it hasn't seen yet. `SSETarget` reads the resume id from, in order of precedence:
+
+1. The **`Last-Event-ID` request header** — the browser sets this automatically when a dropped `EventSource` reconnects, using the `id:` of the last event it received. Reconnects resume correctly with no extra work.
+2. The **`lastEventId` query parameter** — for the _initial_ connection. The native browser `EventSource` can't set request headers, so when you already know where to resume (e.g. you rendered the backlog server-side), pass the id in the URL:
+
+   ```ts
+   const lastEventId = "42"; // highest event id you've already processed
+   const es = new EventSource(`/sse?lastEventId=${encodeURIComponent(lastEventId)}`);
+   ```
+
+Only events whose `id` is greater than the resume id are replayed; passing `0` (or omitting both) replays the full history. The header wins when both are present, so a `lastEventId` left in the URL never overrides the more up-to-date id the browser sends on reconnect.
 
 ## Cloudflare Workflows
 
@@ -170,7 +184,7 @@ The combination of "fan-out a stream" + "replay to late subscribers" appears in 
 
 - **DOM `EventTarget`** / **Node `EventEmitter`** — same dispatch shape, no persistence: late listeners miss prior events.
 - **RxJS `ReplaySubject`** — the closest in-memory analog: a buffer is replayed to each new subscriber.
-- **SSE `Last-Event-ID`** ([WHATWG spec](https://html.spec.whatwg.org/multipage/server-sent-events.html)) — the wire-protocol version of the same idea: when the browser reconnects, it sends the last `id:` it saw and the server resumes from there. `SSETarget` implements this; the `EventStore` is what makes resumption possible across process restarts.
+- **SSE `Last-Event-ID`** ([WHATWG spec](https://html.spec.whatwg.org/multipage/server-sent-events.html)) — the wire-protocol version of the same idea: when the browser reconnects, it sends the last `id:` it saw and the server resumes from there. `SSETarget` implements this (and also accepts the id as a `lastEventId` query parameter, for native `EventSource` clients that can't set the header on the initial request); the `EventStore` is what makes resumption possible across process restarts.
 - **Kafka**, **Redis Streams**, **NATS JetStream** — log-based message brokers with offset- or cursor-based replay.
 - **Event Sourcing** — events as the durable source of truth from which state is derived.
 - **OpenTelemetry** — the span/tracer model the workflow layer is built on; this library is intentionally a small subset for live in-browser observability.

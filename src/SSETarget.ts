@@ -48,9 +48,15 @@ export class SSETarget<E extends ServerSentEvent> {
           clearInterval(ping);
         });
 
-        const lastEventIdHeader = c.req.header("Last-Event-ID") || "0";
+        // The native browser EventSource can't set request headers, so it
+        // can't send Last-Event-ID on the *initial* connection. To let such
+        // clients resume from a known point, we also accept the id as a
+        // `lastEventId` query parameter. The header still wins when present —
+        // the browser sets it automatically on reconnects, where it reflects
+        // the most recently received event.
+        const lastEventIdValue = c.req.header("Last-Event-ID") || c.req.query("lastEventId") || "0";
 
-        const lastEventId = parseInt(lastEventIdHeader, 10);
+        const lastEventId = parseInt(lastEventIdValue, 10);
         if (!isNaN(lastEventId)) {
           const storedEvents = await this.eventStore.getEvents(lastEventId);
 

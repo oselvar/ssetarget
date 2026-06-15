@@ -63,7 +63,7 @@ The library also contains utilities for dispatching events from Cloudflare Workf
 2. Step operations automatically trigger SSE events via `batchedDispatchEvent`
 3. Events are stored in WorkflowEvents Durable Object SQLite database
 4. Clients connect to `/:instanceId/sse` endpoint to receive real-time events
-5. New clients receive all historical events via `Last-Event-ID` header support
+5. New clients receive all historical events via `Last-Event-ID` header support (or a `lastEventId` query parameter on the initial connection, for native `EventSource` clients that can't set headers)
 
 ### Module Exports
 

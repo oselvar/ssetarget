@@ -108,4 +108,43 @@ export function runSSETargetTests(createEventStore: () => EventStore<TestEvent>)
 
     expect(receivedEvents).toEqual(events.slice(1));
   });
+
+  it("should dispatch old events to EventSource with lastEventId query parameter", async () => {
+    const eventStore = createEventStore();
+
+    if (eventStore instanceof NullEventStore) {
+      return;
+    }
+
+    const sse = new SSETarget("/sse", eventStore);
+
+    // Dispatch events *before* the EventSource connects
+    for (const event of events) {
+      await sse.dispatchEvent(event);
+    }
+
+    const receivedEvents: TestEvent[] = [];
+
+    await new Promise<void>((resolve) => {
+      const es = createEventSource({
+        // The native browser EventSource can't set a Last-Event-ID header on
+        // the initial connection, so the resume point is passed in the query.
+        url: "http://0.0.0.0/sse?lastEventId=1",
+        fetch: (url) => {
+          const req = new Request(url);
+          return sse.fetch(req);
+        },
+        onMessage({ event, data }) {
+          const reconstructedEvent = { ...JSON.parse(data), type: event };
+          receivedEvents.push(reconstructedEvent);
+          if (isEqual(reconstructedEvent, lastEvent)) {
+            es.close();
+            resolve();
+          }
+        },
+      });
+    });
+
+    expect(receivedEvents).toEqual(events.slice(1));
+  });
 }
