@@ -35,6 +35,15 @@ export class SSETarget<E extends ServerSentEvent> {
       incoming?.socket?.setNoDelay(true);
 
       return streamSSE(c, async (stream) => {
+        // Flush the response on connect, before any event is available. Some
+        // servers (notably SvelteKit's adapter-node) only write the response
+        // headers once the first body byte is produced, so without this an
+        // EventSource stays stuck "connecting" until the first event or ping.
+        // The trailing comment drains the first one through immediately (same
+        // lazy-flush reason writeFlushed exists below).
+        await stream.write(": connected\n\n");
+        await stream.write(": flush\n\n");
+
         const ping = setInterval(() => {
           writeFlushed(stream, { event: "ping", data: "" }).catch((err) => {
             // eslint-disable-next-line no-console

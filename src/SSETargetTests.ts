@@ -31,6 +31,22 @@ function isEqual(event1: TestEvent, event2: TestEvent): boolean {
 }
 
 export function runSSETargetTests(createEventStore: () => EventStore<TestEvent>) {
+  it("flushes an initial comment on connect, before any event is dispatched", async () => {
+    // Servers that only write response headers once the first body byte is
+    // produced (e.g. SvelteKit's adapter-node) leave an EventSource stuck
+    // "connecting" until the first event or ping arrives. SSETarget must emit
+    // an initial byte on connect so the headers flush immediately. This reads
+    // the first chunk of the stream WITHOUT dispatching any event: without the
+    // initial flush this read would hang until the ping interval.
+    const sse = new SSETarget("/sse", createEventStore());
+    const response = await sse.fetch(new Request("http://0.0.0.0/sse"));
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    const { value } = await reader.read();
+    await reader.cancel();
+    const text = new TextDecoder().decode(value);
+    expect(text.startsWith(":")).toBe(true);
+  });
+
   it("should dispatch events to EventSource", async () => {
     const eventStore = createEventStore();
     const sse = new SSETarget("/sse", eventStore);
