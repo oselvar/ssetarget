@@ -1,6 +1,6 @@
 {
   "name": "@oselvar/ssetarget",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "Dispatch Server-Sent Events",
   "publishConfig": {
     "access": "public"
@@ -52,6 +52,8 @@
     "test": "vitest",
     "start": "wrangler dev --port 9875",
     "fix": "tsc && oxfmt && oxlint --fix .",
+    "types": "wrangler types src/examples/worker-configuration.d.ts",
+    "check:examples": "pnpm run types && tsc -p src/examples/tsconfig.json",
     "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
     "release": "release-it",

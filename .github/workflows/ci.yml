@@ -34,4 +34,6 @@ jobs:
 
       - run: pnpm run build
 
+      - run: pnpm run check:examples
+
       - run: pnpm exec vitest run

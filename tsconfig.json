@@ -27,5 +27,9 @@
     "noUnusedParameters": true,
     "useUnknownInCatchVariables": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  // src/examples is an end-to-end Worker with its own tsconfig that uses
+  // wrangler-generated runtime types. The library must not depend on types
+  // generated from the example, so it is excluded here.
+  "exclude": ["src/examples"]
 }

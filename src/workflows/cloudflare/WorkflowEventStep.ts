@@ -1,10 +1,10 @@
 import type {
-  StepPromise,
   WorkflowSleepDuration,
   WorkflowStep,
   WorkflowStepConfig,
   WorkflowStepContext,
   WorkflowStepEvent,
+  WorkflowStepRollbackOptions,
   WorkflowTimeoutDuration,
 } from "cloudflare:workers";
 
@@ -40,26 +40,36 @@ export class WorkflowEventStep implements WorkflowStep {
   do<T extends Rpc.Serializable<T>>(
     name: string,
     callback: (ctx: WorkflowStepContext) => Promise<T>,
-  ): StepPromise<T>;
+    rollbackOptions?: WorkflowStepRollbackOptions<T>,
+  ): Promise<T>;
   do<T extends Rpc.Serializable<T>>(
     name: string,
     config: WorkflowStepConfig,
     callback: (ctx: WorkflowStepContext) => Promise<T>,
-  ): StepPromise<T>;
+    rollbackOptions?: WorkflowStepRollbackOptions<T>,
+  ): Promise<T>;
   do<T extends Rpc.Serializable<T>>(
     name: string,
     configOrCallback: WorkflowStepConfig | ((ctx: WorkflowStepContext) => Promise<T>),
-    maybeCallback?: (ctx: WorkflowStepContext) => Promise<T>,
-  ): StepPromise<T> {
+    callbackOrRollback?:
+      | ((ctx: WorkflowStepContext) => Promise<T>)
+      | WorkflowStepRollbackOptions<T>,
+    maybeRollbackOptions?: WorkflowStepRollbackOptions<T>,
+  ): Promise<T> {
     const inner =
       typeof configOrCallback === "function"
-        ? this.step.do<T>(name, configOrCallback)
+        ? this.step.do<T>(
+            name,
+            configOrCallback,
+            callbackOrRollback as WorkflowStepRollbackOptions<T> | undefined,
+          )
         : this.step.do<T>(
             name,
             configOrCallback,
-            maybeCallback as (ctx: WorkflowStepContext) => Promise<T>,
+            callbackOrRollback as (ctx: WorkflowStepContext) => Promise<T>,
+            maybeRollbackOptions,
           );
-    return withRollback(this.runWithEvents(name, inner), inner);
+    return this.runWithEvents(name, inner);
   }
 
   sleep(name: string, duration: WorkflowSleepDuration): Promise<void> {
@@ -76,9 +86,8 @@ export class WorkflowEventStep implements WorkflowStep {
       type: string;
       timeout?: WorkflowTimeoutDuration | number;
     },
-  ): StepPromise<WorkflowStepEvent<T>> {
-    const inner = this.step.waitForEvent<T>(name, options);
-    return withRollback(this.runWithEvents(name, inner), inner);
+  ): Promise<WorkflowStepEvent<T>> {
+    return this.runWithEvents(name, this.step.waitForEvent<T>(name, options));
   }
 
   private async runWithEvents<R>(name: string, inner: Promise<R>): Promise<R> {
@@ -94,10 +103,4 @@ export class WorkflowEventStep implements WorkflowStep {
       () => inner,
     );
   }
-}
-
-function withRollback<R>(promise: Promise<R>, source: StepPromise<R>): StepPromise<R> {
-  const result = promise as StepPromise<R>;
-  result.rollback = source.rollback.bind(source);
-  return result;
 }

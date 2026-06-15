@@ -1,0 +1,13 @@
+{
+  // The example is a real Cloudflare Worker, so it type-checks against the
+  // wrangler-generated runtime types in worker-configuration.d.ts rather than
+  // @cloudflare/workers-types (which the published library uses). Dropping
+  // workers-types from "types" avoids two competing `cloudflare:workers`
+  // module declarations.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"],
+  "exclude": []
+}
