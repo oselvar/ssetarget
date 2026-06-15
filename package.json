@@ -22,7 +22,7 @@
   "license": "MIT",
   "author": "Aslak Hellesøy",
   "type": "module",
-  "packageManager": "pnpm@11.0.9",
+  "packageManager": "pnpm@11.7.0",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -57,19 +57,19 @@
     "upgrade": "npm-check-updates --upgrade --deep"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20260501.1",
-    "@types/node": "25.6.0",
-    "@vitest/coverage-v8": "4.1.5",
+    "@cloudflare/workers-types": "4.20260615.1",
+    "@types/node": "25.9.3",
+    "@vitest/coverage-v8": "4.1.9",
     "eventsource-client": "1.2.0",
-    "hono": "4.12.16",
-    "ioredis": "5.10.1",
-    "np": "11.2.0",
-    "npm-check-updates": "22.0.1",
-    "oxfmt": "0.47.0",
-    "oxlint": "1.62.0",
+    "hono": "4.12.25",
+    "ioredis": "5.11.1",
+    "np": "11.2.1",
+    "npm-check-updates": "22.2.3",
+    "oxfmt": "0.54.0",
+    "oxlint": "1.69.0",
     "typescript": "5.8.3",
-    "vitest": "4.1.5",
-    "wrangler": "4.87.0"
+    "vitest": "4.1.9",
+    "wrangler": "4.100.0"
   },
   "peerDependencies": {
     "hono": "^4.8.10",

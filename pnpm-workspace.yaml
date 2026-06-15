@@ -1,4 +1,18 @@
 allowBuilds:
   esbuild: true
-  sharp: true
+  # sharp ships prebuilt binaries (@img/sharp-*). Never build it from source:
+  # if a global libvips is present (e.g. Homebrew), sharp's install script
+  # tries a source build that fails. The prebuilt optional dep works fine.
+  sharp: false
   workerd: true
+minimumReleaseAgeExclude:
+  - '@cloudflare/workers-types@4.20260615.1'
+  - '@vitest/coverage-v8@4.1.9'
+  - '@vitest/expect@4.1.9'
+  - '@vitest/mocker@4.1.9'
+  - '@vitest/pretty-format@4.1.9'
+  - '@vitest/runner@4.1.9'
+  - '@vitest/snapshot@4.1.9'
+  - '@vitest/spy@4.1.9'
+  - '@vitest/utils@4.1.9'
+  - vitest@4.1.9
