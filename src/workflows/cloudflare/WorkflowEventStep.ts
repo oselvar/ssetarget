@@ -63,7 +63,7 @@ export class WorkflowEventStep implements WorkflowStep {
             configOrCallback,
             callbackOrRollback as WorkflowStepRollbackOptions<T> | undefined,
           )
-        : this.step.do<T>(
+        : this.step.do(
             name,
             configOrCallback,
             callbackOrRollback as (ctx: WorkflowStepContext) => Promise<T>,

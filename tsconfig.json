@@ -12,7 +12,7 @@
     "module": "esnext",
     "noEmit": true,
     "target": "esnext",
-    "types": ["node", "@cloudflare/workers-types/2023-07-01"],
+    "types": ["node", "@cloudflare/workers-types"],
     "lib": ["ESNext", "DOM"],
     "strict": true,
     "alwaysStrict": true,
