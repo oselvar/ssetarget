@@ -10,13 +10,17 @@ export type ServerSentEvent = {
   id?: number;
 };
 
+type Subscriber<E> = {
+  queue: E[];
+  notify: (() => void) | undefined;
+};
+
 /**
  * Receives events and dispatches them to connected EventSource clients.
  */
 export class SSETarget<E extends ServerSentEvent> {
   private readonly app: Hono;
-  private eventResolvers: Array<(event: readonly E[]) => void> = [];
-  private pendingEvents: E[] = [];
+  private readonly subscribers = new Set<Subscriber<E>>();
 
   constructor(
     private ssePath: string,
@@ -35,14 +39,14 @@ export class SSETarget<E extends ServerSentEvent> {
       incoming?.socket?.setNoDelay(true);
 
       return streamSSE(c, async (stream) => {
-        // Flush the response on connect, before any event is available. Some
-        // servers (notably SvelteKit's adapter-node) only write the response
-        // headers once the first body byte is produced, so without this an
-        // EventSource stays stuck "connecting" until the first event or ping.
-        // The trailing comment drains the first one through immediately (same
-        // lazy-flush reason writeFlushed exists below).
-        await stream.write(": connected\n\n");
-        await stream.write(": flush\n\n");
+        // Subscribe synchronously, before the first await: streamSSE starts
+        // this callback eagerly, so the subscriber is registered before the
+        // Response is returned to the client. Events dispatched from then on
+        // land in this connection's queue; events dispatched during the
+        // stored-event replay below would otherwise fall into a gap. Events
+        // present in both the replay and the queue are deduplicated by id.
+        const subscriber: Subscriber<E> = { queue: [], notify: undefined };
+        this.subscribers.add(subscriber);
 
         const ping = setInterval(() => {
           writeFlushed(stream, { event: "ping", data: "" }).catch((err) => {
@@ -55,7 +59,20 @@ export class SSETarget<E extends ServerSentEvent> {
         stream.onAbort(() => {
           loop = false;
           clearInterval(ping);
+          this.subscribers.delete(subscriber);
+          const notify = subscriber.notify;
+          subscriber.notify = undefined;
+          notify?.();
         });
+
+        // Flush the response on connect, before any event is available. Some
+        // servers (notably SvelteKit's adapter-node) only write the response
+        // headers once the first body byte is produced, so without this an
+        // EventSource stays stuck "connecting" until the first event or ping.
+        // The trailing comment drains the first one through immediately (same
+        // lazy-flush reason writeFlushed exists below).
+        await stream.write(": connected\n\n");
+        await stream.write(": flush\n\n");
 
         // The native browser EventSource can't set request headers, so it
         // can't send Last-Event-ID on the *initial* connection. To let such
@@ -66,6 +83,7 @@ export class SSETarget<E extends ServerSentEvent> {
         const lastEventIdValue = c.req.header("Last-Event-ID") || c.req.query("lastEventId") || "0";
 
         const lastEventId = parseInt(lastEventIdValue, 10);
+        let lastReplayedId = Number.NEGATIVE_INFINITY;
         if (!isNaN(lastEventId)) {
           const storedEvents = await this.eventStore.getEvents(lastEventId);
 
@@ -76,14 +94,20 @@ export class SSETarget<E extends ServerSentEvent> {
               event: type,
               data: JSON.stringify(rest),
             });
+            if (id !== undefined) {
+              lastReplayedId = id;
+            }
           }
         }
 
         while (loop) {
-          const events = await this.waitForNewEvents();
+          const events = await waitForNewEvents(subscriber);
 
           for (const event of events) {
             const { id, type, ...rest } = event;
+            if (id !== undefined && id <= lastReplayedId) {
+              continue;
+            }
             await writeFlushed(stream, {
               id: id === undefined ? undefined : String(id),
               event: type,
@@ -111,25 +135,33 @@ export class SSETarget<E extends ServerSentEvent> {
   }
 
   private notifyNewEvent(event: E) {
-    // Resolve all waiting promises with the new event
-    if (this.eventResolvers.length > 0) {
-      const resolvers = this.eventResolvers;
-      this.eventResolvers = [];
-      resolvers.forEach((resolve) => resolve([event]));
-    } else {
-      // Only store pending events if there are no waiting resolvers
-      this.pendingEvents.push(event);
+    // Append the event to every subscriber's own queue, and wake up the
+    // subscribers that are currently waiting. Each connection drains only
+    // its own queue, so a busy connection never steals events from another.
+    for (const subscriber of this.subscribers) {
+      subscriber.queue.push(event);
+      const notify = subscriber.notify;
+      if (notify) {
+        subscriber.notify = undefined;
+        notify();
+      }
     }
   }
+}
 
-  private waitForNewEvents(): Promise<readonly E[]> {
-    if (this.pendingEvents.length > 0) {
-      const eventsToReturn = [...this.pendingEvents];
-      this.pendingEvents = [];
-      return Promise.resolve(eventsToReturn);
-    }
-    return new Promise((resolve) => this.eventResolvers.push(resolve));
+function waitForNewEvents<E>(subscriber: Subscriber<E>): Promise<readonly E[]> {
+  if (subscriber.queue.length > 0) {
+    return Promise.resolve(drainQueue(subscriber));
   }
+  return new Promise((resolve) => {
+    subscriber.notify = () => resolve(drainQueue(subscriber));
+  });
+}
+
+function drainQueue<E>(subscriber: Subscriber<E>): readonly E[] {
+  const events = subscriber.queue;
+  subscriber.queue = [];
+  return events;
 }
 
 // Hono's streamSSE writes through a TransformStream whose readable side pulls

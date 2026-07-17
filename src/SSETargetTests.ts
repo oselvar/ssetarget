@@ -84,6 +84,50 @@ export function runSSETargetTests(createEventStore: () => EventStore<TestEvent>)
     expect(receivedEvents).toEqual(events);
   });
 
+  it("delivers every event to every connected client", async () => {
+    // Regression test: with multiple connected clients, events dispatched
+    // while a client's write loop is busy must still reach ALL clients —
+    // not just whichever client's loop drains the queue first.
+    const sse = new SSETarget("/sse", createEventStore());
+    const total = 100;
+    const expected = Array.from({ length: total }, (_, i) => `thing-${i}`);
+
+    async function dispatchAll() {
+      for (const thing of expected) {
+        await sse.dispatchEvent({ type: "test", thing });
+      }
+    }
+
+    let connected = 0;
+    function subscribe(): Promise<readonly string[]> {
+      return new Promise((resolve, reject) => {
+        const things: string[] = [];
+        const es = createEventSource({
+          url: "http://0.0.0.0/sse",
+          fetch: (url) => sse.fetch(new Request(url)),
+          onConnect() {
+            connected++;
+            if (connected === 2) {
+              dispatchAll().catch(reject);
+            }
+          },
+          onMessage({ event, data }) {
+            if (event === "ping") return;
+            things.push((JSON.parse(data) as { thing: string }).thing);
+            if (things.length === total) {
+              es.close();
+              resolve(things);
+            }
+          },
+        });
+      });
+    }
+
+    const [received1, received2] = await Promise.all([subscribe(), subscribe()]);
+    expect(received1).toEqual(expected);
+    expect(received2).toEqual(expected);
+  });
+
   it("should dispatch old events to EventSource with lastEventId", async () => {
     const eventStore = createEventStore();
 
