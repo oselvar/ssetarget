@@ -128,6 +128,68 @@ export function runSSETargetTests(createEventStore: () => EventStore<TestEvent>)
     expect(received2).toEqual(expected);
   });
 
+  it("recovers events from the store when a slow client's queue overflows", async () => {
+    const eventStore = createEventStore();
+
+    if (eventStore instanceof NullEventStore) {
+      // Without replay from the store, events dropped on overflow are lost.
+      return;
+    }
+
+    // A small queue cap so that dispatching outpaces the slow client below
+    // and the connection is forced to drop its queue and resync.
+    const sse = new SSETarget("/sse", eventStore, 10_000, 5);
+    const total = 50;
+    const expected = Array.from({ length: total }, (_, i) => `thing-${i}`);
+
+    async function dispatchAll() {
+      for (const thing of expected) {
+        await sse.dispatchEvent({ type: "test", thing });
+      }
+    }
+
+    const received = await new Promise<readonly string[]>((resolve, reject) => {
+      const things: string[] = [];
+      const es = createEventSource({
+        url: "http://0.0.0.0/sse",
+        // Throttle the reads so backpressure blocks SSETarget's write loop
+        // while events keep being dispatched.
+        fetch: async (url) => {
+          const response = await sse.fetch(new Request(url));
+          const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+          const throttled = new ReadableStream<Uint8Array>({
+            async pull(controller) {
+              await new Promise((r) => setTimeout(r, 2));
+              const { done, value } = await reader.read();
+              if (done) {
+                controller.close();
+              } else {
+                controller.enqueue(value);
+              }
+            },
+            cancel: (reason) => reader.cancel(reason),
+          });
+          return new Response(throttled, { status: response.status, headers: response.headers });
+        },
+        onConnect() {
+          dispatchAll().catch(reject);
+        },
+        onMessage({ event, data }) {
+          if (event === "ping") return;
+          things.push((JSON.parse(data) as { thing: string }).thing);
+          if (things.length === total) {
+            es.close();
+            resolve(things);
+          }
+        },
+      });
+    });
+
+    // Every event arrives exactly once, in order — the dropped ones via the
+    // store, deduplicated against the ones that stayed in the queue.
+    expect(received).toEqual(expected);
+  }, 15_000);
+
   it("should dispatch old events to EventSource with lastEventId", async () => {
     const eventStore = createEventStore();
 
