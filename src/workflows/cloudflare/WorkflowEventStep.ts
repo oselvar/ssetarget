@@ -37,25 +37,17 @@ export class WorkflowEventStep implements WorkflowStep {
     return this.tracer.withSpan({ spanId: this.instanceId, parentSpanId: null, name }, () => fn());
   }
 
-  do<T extends Rpc.Serializable<T>>(
-    name: string,
-    callback: (ctx: WorkflowStepContext) => Promise<T>,
-    rollbackOptions?: WorkflowStepRollbackOptions<T>,
-  ): Promise<T>;
-  do<T extends Rpc.Serializable<T>>(
-    name: string,
-    config: WorkflowStepConfig,
-    callback: (ctx: WorkflowStepContext) => Promise<T>,
-    rollbackOptions?: WorkflowStepRollbackOptions<T>,
-  ): Promise<T>;
-  do<T extends Rpc.Serializable<T>>(
+  // Typed as the base signature so every `WorkflowStep.do` overload (including
+  // the dynamic retry-delay ones, whose config types are not exported) is
+  // forwarded unchanged.
+  readonly do: WorkflowStep["do"] = (<T extends Rpc.Serializable<T>>(
     name: string,
     configOrCallback: WorkflowStepConfig | ((ctx: WorkflowStepContext) => Promise<T>),
     callbackOrRollback?:
       | ((ctx: WorkflowStepContext) => Promise<T>)
       | WorkflowStepRollbackOptions<T>,
     maybeRollbackOptions?: WorkflowStepRollbackOptions<T>,
-  ): Promise<T> {
+  ): Promise<T> => {
     const inner =
       typeof configOrCallback === "function"
         ? this.step.do<T>(
@@ -63,14 +55,14 @@ export class WorkflowEventStep implements WorkflowStep {
             configOrCallback,
             callbackOrRollback as WorkflowStepRollbackOptions<T> | undefined,
           )
-        : this.step.do(
+        : this.step.do<T>(
             name,
             configOrCallback,
             callbackOrRollback as (ctx: WorkflowStepContext) => Promise<T>,
             maybeRollbackOptions,
           );
     return this.runWithEvents(name, inner);
-  }
+  }) as WorkflowStep["do"];
 
   sleep(name: string, duration: WorkflowSleepDuration): Promise<void> {
     return this.runWithEvents(name, this.step.sleep(name, duration));

@@ -70,9 +70,9 @@ Inside the callback you get a `SpanHandle` whose `setAttributes(...)` patches at
 - **`RedisEventStore`** (`@oselvar/ssetarget/redis`) — persists events in Redis with monotonic IDs. Good for horizontally scaled deployments.
 
 ```ts
-import { Redis } from "ioredis";
 import { SSETarget } from "@oselvar/ssetarget";
 import { RedisEventStore } from "@oselvar/ssetarget/redis";
+import { Redis } from "ioredis";
 
 const sse = new SSETarget("/sse", new RedisEventStore(new Redis(), "my-prefix"));
 ```
@@ -102,9 +102,9 @@ The Cloudflare bridge wires up the tracer for you and emits a root span for the 
 - `serveSSE` (`@oselvar/ssetarget/workflows/cloudflare/sse`) — small helper that routes an HTTP request to the right `WorkflowEvents` instance.
 
 ```ts
-import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 import { batchedDispatchEvent } from "@oselvar/ssetarget/workflows/cloudflare";
 import { WorkflowEventStep } from "@oselvar/ssetarget/workflows/cloudflare";
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
 
 export class MyWorkflow extends WorkflowEntrypoint<Env> {
   override async run(event: WorkflowEvent<unknown>, step: WorkflowStep) {
